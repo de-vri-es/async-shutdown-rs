@@ -4,16 +4,16 @@ use std::task::{Context, Poll};
 
 use crate::shutdown_signal::ShutdownSignal;
 
-/// Wrapper that automatically cancels a future when a shutdown is triggered.
+/// Wrapped future that is automatically cancelled when a shutdown is triggered.
 ///
 /// The wrapped future is dropped when a shutdown is triggered before the future completes.
 /// The wrapped future is *not* dropped if it completes before the shutdown signal is received.
-pub struct CancelOnShutdown<F> {
+pub struct WrapCancel<F> {
 	pub(crate) shutdown_signal: ShutdownSignal,
 	pub(crate) future: Option<F>,
 }
 
-impl<F: Future> Future for CancelOnShutdown<F> {
+impl<F: Future> Future for WrapCancel<F> {
 	type Output = Option<F::Output>;
 
 	#[inline]

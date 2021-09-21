@@ -3,11 +3,11 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use crate::{CancelOnShutdown, ShutdownInner};
+use crate::{WrapCancel, ShutdownInner};
 
 /// A future to wait for a shutdown signal.
 ///
-/// The future completes when the associated [`Shutdown`] triggers a shutdown.
+/// The future completes when the associated [`Shutdown`][crate::Shutdown] triggers a shutdown.
 ///
 /// The shutdown signal can be cloned and sent between threads freely.
 #[derive(Clone)]
@@ -24,8 +24,8 @@ impl ShutdownSignal {
 	/// The wrapped future is dropped when the shutdown starts before the future completed.
 	/// If the wrapped future completes before the shutdown signal arrives, it is not dropped.
 	#[inline]
-	pub fn cancel_on_shutdown<F: Future>(&self, future: F) -> CancelOnShutdown<F> {
-		CancelOnShutdown {
+	pub fn wrap_cancel<F: Future>(&self, future: F) -> WrapCancel<F> {
+		WrapCancel {
 			shutdown_signal: self.clone(),
 			future: Some(future),
 		}

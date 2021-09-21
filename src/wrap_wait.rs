@@ -4,13 +4,13 @@ use std::task::{Context, Poll};
 
 use crate::DelayShutdownToken;
 
-/// Future wrapper that delays shutdown completion until the wrapper future completes.
-pub struct DelayShutdown<F> {
+/// Wrapped future that delays shutdown completion until it completes or is droppped.
+pub struct WrapWait<F> {
 	pub(crate) delay_token: Option<DelayShutdownToken>,
 	pub(crate) future: F,
 }
 
-impl<F: Future> Future for DelayShutdown<F> {
+impl<F: Future> Future for WrapWait<F> {
 	type Output = F::Output;
 
 	#[inline]
