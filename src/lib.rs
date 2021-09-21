@@ -34,6 +34,21 @@
 //! You can also use a token to wrap a future with [`DelayShutdownToken::wrap_wait()`].
 //! This has the advantage that it can never fail:
 //! the fact that you have a token means the shutdown has not finished yet.
+//!
+//! # Automatically triggering shutdowns
+//! You can also cause a shutdown when vital tasks or futures stop.
+//! Call [`Shutdown::vital_token()`] to obtain a "vital" token.
+//! When a vital token is dropped, a shutdown is triggered.
+//!
+//! You can also wrap a future to cause a shutdown on completion using [`Shutdown::wrap_vital()`] or [`VitalToken::wrap_vital()`].
+//! This can be used as a convenient way to terminate all asynchronous tasks when a vital task stops.
+//!
+//! # Futures versus Tasks
+//! Be careful when using `JoinHandles` as if they're a regular future.
+//! Depending on your async runtime, when you drop a `JoinHandle` this doesn't necessarily cause the task to stop.
+//! It may simply detach the join handle from the task, meaning that your task is still running.
+//! If you're not careful, this could still cause data loss on shutdown.
+//! As a rule of thumb, you should usually wrap futures *before* you spawn them on a new task.
 
 #![warn(missing_docs)]
 
@@ -49,6 +64,9 @@ pub use shutdown_signal::ShutdownSignal;
 
 mod wrap_cancel;
 pub use wrap_cancel::WrapCancel;
+
+mod wrap_vital;
+pub use wrap_vital::WrapVital;
 
 mod wrap_wait;
 pub use wrap_wait::WrapWait;
@@ -140,6 +158,12 @@ impl Shutdown {
 		self.wait_shutdown().wrap_cancel(future)
 	}
 
+	/// Wrap a future to cause a shutdown when it completes or is dropped.
+	#[inline]
+	pub fn wrap_vital<F: Future>(self, future: F) -> WrapVital<F> {
+		self.vital_token().wrap_vital(future)
+	}
+
 	/// Wrap a future to delay shutdown completion until it completes or is dropped.
 	///
 	/// The returned future transparently completes with the value of the wrapped future.
@@ -172,6 +196,22 @@ impl Shutdown {
 			Ok(DelayShutdownToken {
 				inner: self.inner.clone(),
 			})
+		}
+	}
+
+	/// Get a token that represents a vital task or future.
+	///
+	/// When a [`VitalToken`] is dropped, the shutdown is triggered automatically.
+	/// This applies to *any* token.
+	/// If you clone a token five times and drop one a shutdown is triggered,
+	/// even though four tokens still exist.
+	///
+	/// You can also use [`Self::wrap_vital()`] to wrap a future so that a shutdown is triggered
+	/// when the future completes or if it is dropped.
+	#[inline]
+	pub fn vital_token(&self) -> VitalToken {
+		VitalToken {
+			inner: self.inner.clone(),
 		}
 	}
 }
@@ -217,6 +257,48 @@ impl Clone for DelayShutdownToken {
 impl Drop for DelayShutdownToken {
 	fn drop(&mut self) {
 		self.inner.lock().unwrap().decrease_delay_count();
+	}
+}
+
+/// Token that triggers a shutdown when it is dropped.
+///
+/// The token can be cloned and sent to different threads and tasks freely.
+/// If *one* of the cloned tokens is dropped, a shutdown is triggered.
+/// Even if the the rest of the clones still exist.
+#[derive(Clone)]
+pub struct VitalToken {
+	inner: Arc<Mutex<ShutdownInner>>,
+}
+
+impl VitalToken {
+	/// Wrap a future to cause a shutdown when it completes or is dropped.
+	///
+	/// This consumes the token to avoid accidentally dropping the token
+	/// after wrapping a future and instantly causing a shutdown.
+	/// If you need to keep the token around, you can clone it first:
+	/// ```no_compile
+	/// let future = vital_token.clone().wrap_future(future);
+	/// ```
+	#[inline]
+	pub fn wrap_vital<F: Future>(self, future: F) -> WrapVital<F> {
+		WrapVital {
+			vital_token: Some(self),
+			future,
+		}
+	}
+
+	/// Drop the token without causing a shutdown.
+	///
+	/// This is equivalent to calling [`std::mem::forget()`] on the token.
+	pub fn forget(self) {
+		std::mem::forget(self)
+	}
+}
+
+impl Drop for VitalToken {
+	fn drop(&mut self) {
+		let mut inner = self.inner.lock().unwrap();
+		inner.shutdown();
 	}
 }
 
