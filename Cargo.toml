@@ -1,4 +1,13 @@
 [package]
 name = "async-shutdown"
+description = "one-stop solution for async graceful shutdown"
 version = "0.0.0"
+license = "BSD-2-Clause OR Apache-2.0"
+repository = "https://github.com/de-vri-es/async-shutdown-rs"
+readme = "README.md"
+documentation = "https://docs.rs/async-shutdown"
+
+keywords = ["async", "shutdown", "graceful", "graceful-shutdown"]
+categories = ["asynchronous"]
+
 edition = "2018"
