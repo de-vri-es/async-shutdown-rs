@@ -79,6 +79,7 @@ pub use wrap_wait::WrapWait;
 ///
 /// The shutdown manager can be cloned and shared with multiple tasks.
 /// Each clone uses the same internal state.
+#[derive(Clone)]
 pub struct Shutdown {
 	inner: Arc<Mutex<ShutdownInner>>,
 }
