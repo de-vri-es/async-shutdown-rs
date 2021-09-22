@@ -1,4 +1,4 @@
-# {{name}
+# async-shutdown
 
 Runtime agnostic one-stop solution for graceful shutdown in asynchronous code.
 
