@@ -1,3 +1,6 @@
+# Version 0.1.0-alpha4
+* Fix `shutdown` and `shutdown_complete` notification.
+
 # Version 0.1.0-alpha3 - 2021-09-22
 * Add missing `Clone` impl for `Shutdown`.
 

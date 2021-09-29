@@ -42,7 +42,7 @@ impl Future for ShutdownSignal {
 		if inner.shutdown {
 			Poll::Ready(())
 		} else {
-			inner.on_shutdown_complete.push(context.waker().clone());
+			inner.on_shutdown.push(context.waker().clone());
 			Poll::Pending
 		}
 	}

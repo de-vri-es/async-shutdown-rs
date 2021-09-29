@@ -336,9 +336,7 @@ impl ShutdownInner {
 	fn decrease_delay_count(&mut self) {
 		self.delay_tokens -= 1;
 		if self.delay_tokens == 0 {
-			for waiter in std::mem::take(&mut self.on_shutdown_complete) {
-				waiter.wake()
-			}
+			self.notify_shutdown_complete();
 		}
 	}
 
@@ -346,6 +344,15 @@ impl ShutdownInner {
 		self.shutdown = true;
 		for abort in std::mem::take(&mut self.on_shutdown) {
 			abort.wake()
+		}
+		if self.delay_tokens == 0 {
+			self.notify_shutdown_complete()
+		}
+	}
+
+	fn notify_shutdown_complete(&mut self) {
+		for waiter in std::mem::take(&mut self.on_shutdown_complete) {
+			waiter.wake()
 		}
 	}
 }
