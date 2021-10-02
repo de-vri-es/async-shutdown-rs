@@ -161,7 +161,7 @@ impl Shutdown {
 
 	/// Wrap a future to cause a shutdown when it completes or is dropped.
 	#[inline]
-	pub fn wrap_vital<F: Future>(self, future: F) -> WrapVital<F> {
+	pub fn wrap_vital<F: Future>(&self, future: F) -> WrapVital<F> {
 		self.vital_token().wrap_vital(future)
 	}
 
