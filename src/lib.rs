@@ -235,12 +235,15 @@ pub struct DelayShutdownToken {
 impl DelayShutdownToken {
 	/// Wrap a future to delay shutdown completion until it completes.
 	///
+	/// This consumed the token to avoid keeping an unused token around by accident, which would delay shutdown indefinately.
+	/// If you wish to use the token multiple times, you can clone it first: `token.clone().wrap_wait(...)`.
+	///
 	/// The returned future transparently completes with the value of the wrapped future.
 	/// However, the shutdown will not be considered complete until the future completes or is dropped.
 	#[inline]
-	pub fn wrap_wait<F: Future>(&self, future: F) -> WrapWait<F> {
+	pub fn wrap_wait<F: Future>(self, future: F) -> WrapWait<F> {
 		WrapWait {
-			delay_token: Some(self.clone()),
+			delay_token: Some(self),
 			future,
 		}
 	}

@@ -1,3 +1,6 @@
+# Unlreleased
+* Change `DelayShutdownToken::wrap_wait()` to constume the token.
+
 # Version 0.1.0-alpha4 - 2021-09-29
 * Fix `shutdown` and `shutdown_complete` notification.
 
