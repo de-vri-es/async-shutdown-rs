@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.1.0-beta2 - 2021-10-04
 * Regenerate README.md from library documentation.
 
 # Version 0.1.0-beta1 - 2021-10-04
