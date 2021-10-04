@@ -3,7 +3,7 @@
 {{readme}}
 
 [`Shutdown`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html
-[`Shutdown::wait_shutdown()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wait_shutdown
+[`Shutdown::wait_shutdown_triggered()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wait_shutdown_triggered
 [`Shutdown::wrap_cancel()`]:  https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wrap_cancel
 [`Shutdown::shutdown()`]:  https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.shutdown
 [`Shutdown::wait_shutdown_complete()`]:  https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wait_shutdown_complete

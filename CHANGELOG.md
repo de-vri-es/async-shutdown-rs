@@ -1,3 +1,8 @@
+# Unlreleased
+* Change `DelayShutdownToken::wrap_wait()` to constume the token.
+* Do not consume the `Shutdown` object in `Shutdown::wrap_vital()`.
+* Rename `wait_shutdown()` to `wait_shutdown_triggered()`.
+
 # Version 0.1.0-alpha4 - 2021-09-29
 * Fix `shutdown` and `shutdown_complete` notification.
 

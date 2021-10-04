@@ -11,3 +11,8 @@ keywords = ["async", "shutdown", "graceful", "graceful-shutdown"]
 categories = ["asynchronous"]
 
 edition = "2018"
+
+[dev-dependencies]
+assert2 = "0.3.4"
+tokio = { version = "1.12.0", features = ["rt-multi-thread", "time"] }
+futures = "0.3.17"
