@@ -9,7 +9,7 @@ This crate addresses two separate but related problems regarding graceful shutdo
 Both issues are handled by the [`Shutdown`] struct.
 
 ## Stopping running futures
-To stop running futures, you can get a future to wait for the shutdown signal with [`Shutdown::wait_shutdown()`].
+To stop running futures, you can get a future to wait for the shutdown signal with [`Shutdown::wait_shutdown_triggered()`].
 In this case you must write your async code to react to the shutdown signal appropriately.
 
 Alternatively, you can wrap a future to be cancelled (by being dropped) when the shutdown starts with [`Shutdown::wrap_cancel()`].
@@ -53,7 +53,7 @@ If you're not careful, this could still cause data loss on shutdown.
 As a rule of thumb, you should usually wrap futures *before* you spawn them on a new task.
 
 [`Shutdown`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html
-[`Shutdown::wait_shutdown()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wait_shutdown
+[`Shutdown::wait_shutdown_triggered()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wait_shutdown_triggered
 [`Shutdown::wrap_cancel()`]:  https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wrap_cancel
 [`Shutdown::shutdown()`]:  https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.shutdown
 [`Shutdown::wait_shutdown_complete()`]:  https://docs.rs/async-shutdown/latest/async_shutdown/struct.Shutdown.html#method.wait_shutdown_complete
