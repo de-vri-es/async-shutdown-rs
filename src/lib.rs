@@ -7,7 +7,7 @@
 //! Both issues are handled by the [`Shutdown`] struct.
 //!
 //! # Stopping running futures
-//! To stop running futures, you can get a future to wait for the shutdown signal with [`Shutdown::wait_shutdown()`].
+//! To stop running futures, you can get a future to wait for the shutdown signal with [`Shutdown::wait_shutdown_triggered()`].
 //! In this case you must write your async code to react to the shutdown signal appropriately.
 //!
 //! Alternatively, you can wrap a future to be cancelled (by being dropped) when the shutdown starts with [`Shutdown::wrap_cancel()`].
@@ -115,7 +115,7 @@ impl Shutdown {
 	/// to automatically cancel a future when the shutdown signal is received.
 	/// This is identical to `Self::wrap_cancel()`, but can be done if you only have a `ShutdownSignal`.
 	#[inline]
-	pub fn wait_shutdown(&self) -> ShutdownSignal {
+	pub fn wait_shutdown_triggered(&self) -> ShutdownSignal {
 		ShutdownSignal {
 			inner: self.inner.clone(),
 		}
@@ -156,7 +156,7 @@ impl Shutdown {
 	/// If the wrapped future completes before the shutdown signal arrives, it is not dropped.
 	#[inline]
 	pub fn wrap_cancel<F: Future>(&self, future: F) -> WrapCancel<F> {
-		self.wait_shutdown().wrap_cancel(future)
+		self.wait_shutdown_triggered().wrap_cancel(future)
 	}
 
 	/// Wrap a future to cause a shutdown when it completes or is dropped.

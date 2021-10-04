@@ -20,7 +20,7 @@ fn shutdown() {
 	test_timeout(async {
 		let shutdown = Shutdown::new();
 		shutdown.shutdown();
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 
@@ -36,7 +36,7 @@ fn shutdown() {
 			}
 		});
 
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 }
@@ -54,8 +54,8 @@ fn wrap_cancel() {
 	// Same test, but use a ShutdownSignal to wrap the future.
 	test_timeout(async {
 		let shutdown = Shutdown::new();
-		let wait_shutdown = shutdown.wait_shutdown();
-		let task = tokio::spawn(wait_shutdown.wrap_cancel(future::pending::<()>()));
+		let wait_shutdown_triggered = shutdown.wait_shutdown_triggered();
+		let task = tokio::spawn(wait_shutdown_triggered.wrap_cancel(future::pending::<()>()));
 		shutdown.shutdown();
 		assert!(let Ok(None) = task.await);
 	});
@@ -91,7 +91,7 @@ fn delay_token() {
 		let_assert!(Ok(delay) = shutdown.delay_shutdown_token());
 
 		shutdown.shutdown();
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 
 		// Move the token into a task where it is dropped after a short sleep.
 		tokio::spawn(async move {
@@ -115,7 +115,7 @@ fn wrap_delay() {
 			tokio::time::sleep(Duration::from_millis(10)).await;
 		}));
 
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 }
@@ -138,7 +138,7 @@ fn vital_token() {
 		let vital = shutdown.vital_token();
 		drop(vital);
 
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 
@@ -152,7 +152,7 @@ fn vital_token() {
 			drop(vital);
 		});
 
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 }
@@ -167,7 +167,7 @@ fn wrap_vital() {
 			tokio::time::sleep(Duration::from_millis(20)).await;
 		}));
 
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 
@@ -178,7 +178,7 @@ fn wrap_vital() {
 		// Trigger the shutdown by dropping a vital token from a task after a short sleep.
 		tokio::spawn(shutdown.wrap_vital(future::ready(())));
 
-		shutdown.wait_shutdown().await;
+		shutdown.wait_shutdown_triggered().await;
 		shutdown.wait_shutdown_complete().await;
 	});
 }
