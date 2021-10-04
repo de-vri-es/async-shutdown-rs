@@ -38,7 +38,6 @@ fn shutdown() {
 
 		shutdown.wait_shutdown().await;
 		shutdown.wait_shutdown_complete().await;
-		assert!(true);
 	});
 }
 
@@ -155,7 +154,6 @@ fn vital_token() {
 
 		shutdown.wait_shutdown().await;
 		shutdown.wait_shutdown_complete().await;
-		assert!(true);
 	});
 }
 
@@ -171,7 +169,6 @@ fn wrap_vital() {
 
 		shutdown.wait_shutdown().await;
 		shutdown.wait_shutdown_complete().await;
-		assert!(true);
 	});
 
 	// Same test, but now use a future that is instantly ready.
@@ -183,6 +180,5 @@ fn wrap_vital() {
 
 		shutdown.wait_shutdown().await;
 		shutdown.wait_shutdown_complete().await;
-		assert!(true);
 	});
 }
