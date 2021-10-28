@@ -44,6 +44,7 @@ async fn run_server(shutdown: Shutdown, bind_address: &str) -> std::io::Result<(
 	eprintln!("Server listening on {}", bind_address);
 
 	// Simply use `wrap_cancel` for everything, since we do not need clean-up for the listening socket.
+	// See `handle_client` for a case where logging is still performed after the cancel.
 	while let Some(connection) = shutdown.wrap_cancel(server.accept()).await {
 		let (stream, address) = connection?;
 		tokio::spawn(handle_client(shutdown.clone(), stream, address));
