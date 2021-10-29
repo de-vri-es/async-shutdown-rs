@@ -3,6 +3,10 @@ use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+// This example is a tokio-based TCP echo server.
+// It simply echos everything it receives from a peer back to that same peer,
+// and it uses this crate for graceful shutdown.
+
 #[tokio::main]
 async fn main() {
 	// Create a new shutdown object.
@@ -44,7 +48,7 @@ async fn run_server(shutdown: Shutdown, bind_address: &str) -> std::io::Result<(
 	eprintln!("Server listening on {}", bind_address);
 
 	// Simply use `wrap_cancel` for everything, since we do not need clean-up for the listening socket.
-	// See `handle_client` for a case where logging is still performed after the cancel.
+	// See `handle_client` for a case where a future is given the time to perform logging after the shutdown was triggered.
 	while let Some(connection) = shutdown.wrap_cancel(server.accept()).await {
 		let (stream, address) = connection?;
 		tokio::spawn(handle_client(shutdown.clone(), stream, address));
@@ -56,26 +60,30 @@ async fn run_server(shutdown: Shutdown, bind_address: &str) -> std::io::Result<(
 async fn handle_client(shutdown: Shutdown, mut stream: TcpStream, address: SocketAddr) {
 	eprintln!("Accepted new connection from {}", address);
 
-	// Create a future that can be cancelled, but still prints what happend afterwards.
-	let work = {
-		let shutdown = shutdown.clone();
-		async move {
-			match shutdown.wrap_cancel(echo_loop(&mut stream)).await {
-				Some(Err(e)) => eprintln!("Error in connection {}: {}", address, e),
-				Some(Ok(())) => eprintln!("Connection closed by {}", address),
-				None => eprintln!("Shutdown triggered, closing connection with {}", address),
-			}
+	// Make sure the shutdown doesn't complete until the delay token is dropped.
+	//
+	// Getting the token will fail if the shutdown has already started,
+	// in which case we just log a message and return.
+	//
+	// If you already have a future that should be allowed to complete,
+	// you can also use `shutdown.wrap_wait(...)`.
+	// Here it is easier to use a token though.
+	let _delay_token = match shutdown.delay_shutdown_token() {
+		Ok(token) => token,
+		Err(_) => {
+			eprintln!("Shutdown already started, closing connection with {}", address);
+			return;
 		}
 	};
 
-	// Make sure the shutdown doesn't complete until the `work` future finishes.
-	//
-	// Wrapping the future will fail if the shutdown has already started,
-	// in which case we just log a message and drop the future instead of awaiting it.
-	match shutdown.wrap_wait(work) {
-		Err(_) => eprintln!("Shutdown already started, closing connection with {}", address),
-		Ok(work) => work.await,
+	// Now run the echo loop, but cancel it when the shutdown is triggered.
+	match shutdown.wrap_cancel(echo_loop(&mut stream)).await {
+		Some(Err(e)) => eprintln!("Error in connection {}: {}", address, e),
+		Some(Ok(())) => eprintln!("Connection closed by {}", address),
+		None => eprintln!("Shutdown triggered, closing connection with {}", address),
 	}
+
+	// The delay token will be dropped here, allowing the shutdown to complete.
 }
 
 async fn echo_loop(stream: &mut TcpStream) -> std::io::Result<()> {
