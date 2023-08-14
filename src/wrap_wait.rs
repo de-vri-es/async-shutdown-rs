@@ -5,6 +5,7 @@ use std::task::{Context, Poll};
 use crate::DelayShutdownToken;
 
 /// Wrapped future that delays shutdown completion until it completes or is droppped.
+#[must_use = "futures must be polled to make progress"]
 pub struct WrapWait<F> {
 	pub(crate) delay_token: Option<DelayShutdownToken>,
 	pub(crate) future: F,

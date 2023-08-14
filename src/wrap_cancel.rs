@@ -8,6 +8,7 @@ use crate::shutdown_signal::ShutdownSignal;
 ///
 /// The wrapped future is dropped when a shutdown is triggered before the future completes.
 /// The wrapped future is *not* dropped if it completes before the shutdown signal is received.
+#[must_use = "futures must be polled to make progress"]
 pub struct WrapCancel<F> {
 	pub(crate) shutdown_signal: ShutdownSignal,
 	pub(crate) future: Option<F>,

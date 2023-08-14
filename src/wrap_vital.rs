@@ -5,6 +5,7 @@ use std::task::{Context, Poll};
 use crate::VitalToken;
 
 /// Wrapped future that triggers a shutdown when it completes or is dropped.
+#[must_use = "futures must be polled to make progress"]
 pub struct WrapVital<F> {
 	pub(crate) vital_token: Option<VitalToken>,
 	pub(crate) future: F,
