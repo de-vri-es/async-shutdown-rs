@@ -1,4 +1,4 @@
-# main
+# Version 0.1.3 - 2023-08-14
 * Mark all future wrappers as `#[must_use]`.
 
 # Version 0.1.2 - 2021-10-30
