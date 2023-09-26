@@ -1,4 +1,4 @@
-# Unreleased:
+# Version 0.2.0 - 2023-09-26:
 * Rename `Shutdown` struct to `ShutdownManager`.
 * Rename `ShutdownManager` methods:
   * `shutdown()` is now called `trigger_shutdown()`
