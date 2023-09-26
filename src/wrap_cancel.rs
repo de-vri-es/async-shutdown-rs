@@ -6,8 +6,11 @@ use crate::shutdown_signal::ShutdownSignal;
 
 /// Wrapped future that is automatically cancelled when a shutdown is triggered.
 ///
-/// The wrapped future is dropped when a shutdown is triggered before the future completes.
-/// The wrapped future is *not* dropped if it completes before the shutdown signal is received.
+/// If the wrapped future completes before the shutdown is triggered,
+/// the output of the original future is yielded as `Ok(value)`.
+///
+/// If the shutdown is triggered before the wrapped future completes,
+/// the original future is dropped and the shutdown reason is yielded as `Err(shutdown_reason)`.
 #[must_use = "futures must be polled to make progress"]
 pub struct WrapCancel<T: Clone, F> {
 	pub(crate) shutdown_signal: ShutdownSignal<T>,

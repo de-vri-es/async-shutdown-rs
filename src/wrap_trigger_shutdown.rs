@@ -4,7 +4,7 @@ use std::task::{Context, Poll};
 
 use crate::TriggerShutdownToken;
 
-/// Wrapped future that triggers a shutdown when it completes or is dropped.
+/// Wrapped future that triggers a shutdown when it completes or when it is dropped.
 #[must_use = "futures must be polled to make progress"]
 pub struct WrapTriggerShutdown<T: Clone, F> {
 	pub(crate) trigger_shutdown_token: Option<TriggerShutdownToken<T>>,

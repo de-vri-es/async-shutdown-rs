@@ -188,9 +188,10 @@ pub use wrap_delay_shutdown::WrapDelayShutdown;
 
 /// Shutdown manager for asynchronous tasks and futures.
 ///
-/// The shutdown manager serves two separate but related purposes:
-/// * To signal futures to shutdown or forcibly cancel them (by dropping them).
-/// * To wait for futures to perform their clean-up after a shutdown was triggered.
+/// The shutdown manager allows you to:
+/// * Signal futures to shutdown or forcibly cancel them (by dropping them).
+/// * Wait for futures to perform their clean-up after a shutdown was triggered.
+/// * Retrieve the shutdown reason after the shutdown was triggered.
 ///
 /// The shutdown manager can be cloned and shared with multiple tasks.
 /// Each clone uses the same internal state.
@@ -229,12 +230,12 @@ impl<T: Clone> ShutdownManager<T> {
 		self.inner.lock().unwrap().shutdown_reason.clone()
 	}
 
-	/// Asynchronously wait for a shutdown to be triggered.
+	/// Asynchronously wait for the shutdown to be triggered.
 	///
-	/// This returns a future that completes when a shutdown is triggered.
+	/// This returns a future that completes when the shutdown is triggered.
 	/// The future can be cloned and sent to other threads or tasks freely.
 	///
-	/// If a shutdown is already triggered, the returned future immediately resolves.
+	/// If the shutdown is already triggered, the returned future immediately resolves.
 	///
 	/// You can also use `ShutdownSignal::wrap_cancel()` of the returned object
 	/// to automatically cancel a future when the shutdown signal is received.
@@ -262,9 +263,9 @@ impl<T: Clone> ShutdownManager<T> {
 
 	/// Trigger the shutdown.
 	///
-	/// This will complete all [`ShutdownSignal`] and [`WrapCancel`] futures associated with this shutdown manager.
+	/// This will cause all [`ShutdownSignal`] and [`WrapCancel`] futures associated with this shutdown manager to be resolved.
 	///
-	/// The shutdown will not complete until all [`DelayShutdownTokens`][DelayShutdownToken] are dropped.
+	/// The shutdown will not be considered complete until all [`DelayShutdownTokens`][DelayShutdownToken] are dropped.
 	///
 	/// If the shutdown was already started, this function returns an error.
 	#[inline]
@@ -272,22 +273,22 @@ impl<T: Clone> ShutdownManager<T> {
 		self.inner.lock().unwrap().shutdown(reason)
 	}
 
-	/// Wrap a future so that it is cancelled (dropped) when a shutdown is triggered.
+	/// Wrap a future so that it is cancelled (dropped) when the shutdown is triggered.
 	///
-	/// The returned future completes with `Err(shutdown_reason)` if a shutdown is triggered,
+	/// The returned future completes with `Err(shutdown_reason)` if the shutdown is triggered,
 	/// and with `Ok(x)` if the wrapped future completes first.
 	#[inline]
 	pub fn wrap_cancel<F: Future>(&self, future: F) -> WrapCancel<T, F> {
 		self.wait_shutdown_triggered().wrap_cancel(future)
 	}
 
-	/// Wrap a future to cause a shutdown when it completes or is dropped.
+	/// Wrap a future to cause a shutdown when the future completes or when it is dropped.
 	#[inline]
 	pub fn wrap_trigger_shutdown<F: Future>(&self, shutdown_reason: T, future: F) -> WrapTriggerShutdown<T, F> {
 		self.trigger_shutdown_token(shutdown_reason).wrap_future(future)
 	}
 
-	/// Wrap a future to delay shutdown completion until the wrapped future completes or is dropped.
+	/// Wrap a future to delay shutdown completion until the wrapped future completes or until it is dropped.
 	///
 	/// The returned future transparently completes with the value of the wrapped future.
 	/// However, the shutdown will not be considered complete until the wrapped future completes or is dropped.
@@ -298,7 +299,7 @@ impl<T: Clone> ShutdownManager<T> {
 		Ok(self.delay_shutdown_token()?.wrap_future(future))
 	}
 
-	/// Get a token to delay shutdown completion.
+	/// Get a token that delays shutdown completion as long as it exists.
 	///
 	/// The manager keeps track of all the tokens it hands out.
 	/// The tokens can be cloned and sent to different threads and tasks.
@@ -348,7 +349,7 @@ impl<T: Clone> Default for ShutdownManager<T> {
 	}
 }
 
-/// Token that delays completion of a shutdown as long as it exists.
+/// Token that delays shutdown completion as long as it exists.
 ///
 /// The token can be cloned and sent to different threads and tasks freely.
 ///
@@ -358,7 +359,7 @@ pub struct DelayShutdownToken<T: Clone> {
 }
 
 impl<T: Clone> DelayShutdownToken<T> {
-	/// Wrap a future to delay shutdown completion until the wrapped future completes (or is dropped).
+	/// Wrap a future to delay shutdown completion until the wrapped future completes or until it is dropped.
 	///
 	/// This consumes the token to avoid keeping an unused token around by accident, which would delay shutdown indefinitely.
 	/// If you wish to use the token multiple times, you can clone it first:
@@ -510,7 +511,7 @@ impl<T: Clone> ShutdownManagerInner<T> {
 	}
 }
 
-/// Error returned when you try to start a shutdown multiple times.
+/// Error returned when you try to trigger the shutdown multiple times on the same [`ShutdownManager`].
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ShutdownAlreadyStarted<T> {
@@ -539,7 +540,7 @@ impl<T> std::fmt::Display for ShutdownAlreadyStarted<T> {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct ShutdownAlreadyCompleted<T> {
-	/// The shutdown reason of the already completed shudown.
+	/// The shutdown reason of the already completed shutdown.
 	pub shutdown_reason: T,
 }
 
