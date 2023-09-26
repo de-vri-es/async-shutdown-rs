@@ -2,16 +2,16 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::DelayShutdownToken;
+use crate::TriggerShutdownToken;
 
-/// Wrapped future that delays shutdown completion until it completes or is droppped.
+/// Wrapped future that triggers a shutdown when it completes or is dropped.
 #[must_use = "futures must be polled to make progress"]
-pub struct WrapWait<F> {
-	pub(crate) delay_token: Option<DelayShutdownToken>,
+pub struct WrapTriggerShutdown<T: Clone, F> {
+	pub(crate) trigger_shutdown_token: Option<TriggerShutdownToken<T>>,
 	pub(crate) future: F,
 }
 
-impl<F: Future> Future for WrapWait<F> {
+impl<T: Clone, F: Future> Future for WrapTriggerShutdown<T, F> {
 	type Output = F::Output;
 
 	#[inline]
@@ -22,7 +22,7 @@ impl<F: Future> Future for WrapWait<F> {
 			match Pin::new_unchecked(&mut me.future).poll(context) {
 				Poll::Pending => Poll::Pending,
 				Poll::Ready(value) => {
-					me.delay_token = None;
+					me.trigger_shutdown_token = None;
 					Poll::Ready(value)
 				},
 			}

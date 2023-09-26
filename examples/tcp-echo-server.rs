@@ -1,4 +1,4 @@
-use async_shutdown::Shutdown;
+use async_shutdown::ShutdownManager;
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -11,7 +11,7 @@ use tokio::net::{TcpListener, TcpStream};
 async fn main() {
 	// Create a new shutdown object.
 	// We will clone it into all tasks that need it.
-	let shutdown = Shutdown::new();
+	let shutdown = ShutdownManager::new();
 
 	// Spawn a task to wait for CTRL+C and trigger a shutdown.
 	tokio::spawn({
@@ -22,34 +22,36 @@ async fn main() {
 				std::process::exit(1);
 			} else {
 				eprintln!("\nReceived interrupt signal. Shutting down server...");
-				shutdown.shutdown();
+				shutdown.trigger_shutdown(0).ok();
 			}
 		}
 	});
 
 	// Run the server and set a non-zero exit code if we had an error.
-	let exit_code = match run_server(shutdown.clone(), "[::]:9372").await {
-		Ok(()) => 0,
+	match run_server(shutdown.clone(), "[::]:9372").await {
+		Ok(()) => {
+			shutdown.trigger_shutdown(0).ok();
+		},
 		Err(e) => {
 			eprintln!("Server task finished with an error: {}", e);
-			1
+			shutdown.trigger_shutdown(1).ok();
 		},
 	};
 
 	// Wait for clients to run their cleanup code, then exit.
 	// Without this, background tasks could be killed before they can run their cleanup code.
-	shutdown.wait_shutdown_complete().await;
+	let exit_code = shutdown.wait_shutdown_complete().await;
 
 	std::process::exit(exit_code);
 }
 
-async fn run_server(shutdown: Shutdown, bind_address: &str) -> std::io::Result<()> {
+async fn run_server(shutdown: ShutdownManager<i32>, bind_address: &str) -> std::io::Result<()> {
 	let server = TcpListener::bind(&bind_address).await?;
 	eprintln!("Server listening on {}", bind_address);
 
 	// Simply use `wrap_cancel` for everything, since we do not need clean-up for the listening socket.
 	// See `handle_client` for a case where a future is given the time to perform logging after the shutdown was triggered.
-	while let Some(connection) = shutdown.wrap_cancel(server.accept()).await {
+	while let Ok(connection) = shutdown.wrap_cancel(server.accept()).await {
 		let (stream, address) = connection?;
 		tokio::spawn(handle_client(shutdown.clone(), stream, address));
 	}
@@ -57,7 +59,7 @@ async fn run_server(shutdown: Shutdown, bind_address: &str) -> std::io::Result<(
 	Ok(())
 }
 
-async fn handle_client(shutdown: Shutdown, mut stream: TcpStream, address: SocketAddr) {
+async fn handle_client(shutdown: ShutdownManager<i32>, mut stream: TcpStream, address: SocketAddr) {
 	eprintln!("Accepted new connection from {}", address);
 
 	// Make sure the shutdown doesn't complete until the delay token is dropped.
@@ -78,9 +80,9 @@ async fn handle_client(shutdown: Shutdown, mut stream: TcpStream, address: Socke
 
 	// Now run the echo loop, but cancel it when the shutdown is triggered.
 	match shutdown.wrap_cancel(echo_loop(&mut stream)).await {
-		Some(Err(e)) => eprintln!("Error in connection {}: {}", address, e),
-		Some(Ok(())) => eprintln!("Connection closed by {}", address),
-		None => eprintln!("Shutdown triggered, closing connection with {}", address),
+		Ok(Err(e)) => eprintln!("Error in connection {}: {}", address, e),
+		Ok(Ok(())) => eprintln!("Connection closed by {}", address),
+		Err(_exit_code) => eprintln!("Shutdown triggered, closing connection with {}", address),
 	}
 
 	// The delay token will be dropped here, allowing the shutdown to complete.
@@ -94,7 +96,7 @@ async fn echo_loop(stream: &mut TcpStream) -> std::io::Result<()> {
 		if read == 0 {
 			break;
 		}
-		stream.write(&buffer[..read]).await?;
+		stream.write_all(&buffer[..read]).await?;
 	}
 
 	Ok(())
