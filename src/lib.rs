@@ -11,7 +11,7 @@
 //! You can get a future to wait for the shutdown signal with [`ShutdownManager::wait_shutdown_triggered()`].
 //! In this case you must write your async code to react to the shutdown signal appropriately.
 //!
-//! Alternatively, you can wrap a future to be cancelled (by being dropped) when the shutdown starts with [`ShutdownManager::wrap_cancel()`].
+//! Alternatively, you can wrap a future to be cancelled (by being dropped) when the shutdown is triggered with [`ShutdownManager::wrap_cancel()`].
 //! This doesn't require the wrapped future to know anything about the shutdown signal,
 //! but it also doesn't allow the future to run custom shutdown code.
 //!
@@ -20,23 +20,22 @@
 //! If you want to pass a non-[`Clone`] object or an object that is expensive to clone, you can wrap it in an [`Arc`].
 //!
 //! # Waiting for futures to complete.
-//! If you have futures that run custom shutdown code (as opposed to just dropping the futures),
-//! you will want to wait for that cleanup code to finish.
+//! You may also want to wait for some futures to complete before actually shutting down instead of just dropping them.
+//! This might be important to cleanly shutdown and prevent data loss.
 //! You can do that with [`ShutdownManager::wait_shutdown_complete()`].
 //! That function returns a future that only completes when the shutdown is "completed".
 //!
 //! You must also prevent the shutdown from completing too early by calling [`ShutdownManager::delay_shutdown_token()`] or [`ShutdownManager::wrap_delay_shutdown()`].
-//! Note that this can only be done before the shutdown has completed.
-//! If the shutdown is already complete those functions will return an error.
-//!
 //! The [`ShutdownManager::delay_shutdown_token()`] function gives you a [`DelayShutdownToken`] which prevents the shutdown from completing.
 //! To allow the shutdown to finish, simply drop the token.
 //! Alternatively, [`ShutdownManager::wrap_delay_shutdown()`] wraps an existing future,
 //! and will prevent the shutdown from completing until the future either completes or is dropped.
 //!
+//! Note that you can only delay the shutdown completion if it has not completed already.
+//! If the shutdown is already complete those functions will return an error.
+//!
 //! You can also use a token to wrap a future with [`DelayShutdownToken::wrap_future()`].
-//! This has the advantage that it can never fail:
-//! the fact that you have a token means the shutdown has not finished yet.
+//! If you already have a token, this allows you to wrap a future without having to worry that the shutdown might already be completed.
 //!
 //! # Automatically triggering shutdowns
 //! You can also trigger a shutdown automatically using a [`TriggerShutdownToken`].
@@ -131,7 +130,7 @@
 //!     // in which case we just log a message and return.
 //!     //
 //!     // If you already have a future that should be allowed to complete,
-//!     // you can also use `shutdown.wrap_wait(...)`.
+//!     // you can also use `shutdown.wrap_delay_shutdown(...)`.
 //!     // Here it is easier to use a token though.
 //!     let _delay_token = match shutdown.delay_shutdown_token() {
 //!         Ok(token) => token,
@@ -275,8 +274,8 @@ impl<T: Clone> ShutdownManager<T> {
 
 	/// Wrap a future so that it is cancelled (dropped) when a shutdown is triggered.
 	///
-	/// The returned future completes with `None` when a shutdown is triggered,
-	/// and with `Some(x)` if the wrapped future completes first.
+	/// The returned future completes with `Err(shutdown_reason)` if a shutdown is triggered,
+	/// and with `Ok(x)` if the wrapped future completes first.
 	#[inline]
 	pub fn wrap_cancel<F: Future>(&self, future: F) -> WrapCancel<T, F> {
 		self.wait_shutdown_triggered().wrap_cancel(future)
@@ -288,10 +287,10 @@ impl<T: Clone> ShutdownManager<T> {
 		self.trigger_shutdown_token(shutdown_reason).wrap_future(future)
 	}
 
-	/// Wrap a future to delay shutdown completion until it completes or is dropped.
+	/// Wrap a future to delay shutdown completion until the wrapped future completes or is dropped.
 	///
 	/// The returned future transparently completes with the value of the wrapped future.
-	/// However, the shutdown will not be considered complete until the future completes or is dropped.
+	/// However, the shutdown will not be considered complete until the wrapped future completes or is dropped.
 	///
 	/// If the shutdown has already completed, this function returns an error.
 	#[inline]
@@ -325,12 +324,11 @@ impl<T: Clone> ShutdownManager<T> {
 		})
 	}
 
-	/// Get a token that represents a vital task or future.
+	/// Get a token that triggers a shutdown when dropped.
 	///
 	/// When a [`TriggerShutdownToken`] is dropped, the shutdown is triggered automatically.
 	/// This applies to *any* token.
-	/// If you clone a token five times and drop one a shutdown is triggered,
-	/// even though four tokens still exist.
+	/// If you clone a token five times and drop one of them, it will trigger a shutdown/
 	///
 	/// You can also use [`Self::wrap_trigger_shutdown()`] to wrap a future so that a shutdown is triggered
 	/// when the future completes or if it is dropped.
@@ -360,10 +358,16 @@ pub struct DelayShutdownToken<T: Clone> {
 }
 
 impl<T: Clone> DelayShutdownToken<T> {
-	/// Wrap a future to delay shutdown completion until it completes.
+	/// Wrap a future to delay shutdown completion until the wrapped future completes (or is dropped).
 	///
-	/// This consumes the token to avoid keeping an unused token around by accident, which would delay shutdown indefinately.
-	/// If you wish to use the token multiple times, you can clone it first: `token.clone().wrap_wait(...)`.
+	/// This consumes the token to avoid keeping an unused token around by accident, which would delay shutdown indefinitely.
+	/// If you wish to use the token multiple times, you can clone it first:
+	/// ```
+	/// # let shutdown = async_shutdown::ShutdownManager::<()>::new();
+	/// # let delay_shutdown_token = shutdown.delay_shutdown_token().unwrap();
+	/// # let future = async { () };
+	/// let future = delay_shutdown_token.clone().wrap_future(future);
+	/// ```
 	///
 	/// The returned future transparently completes with the value of the wrapped future.
 	/// However, the shutdown will not be considered complete until the future completes or is dropped.
@@ -397,7 +401,7 @@ impl<T: Clone> Drop for DelayShutdownToken<T> {
 ///
 /// The token can be cloned and sent to different threads and tasks freely.
 /// If *one* of the cloned tokens is dropped, a shutdown is triggered.
-/// Even if the the rest of the clones still exist.
+/// Even if the rest of the clones still exist.
 #[derive(Clone)]
 pub struct TriggerShutdownToken<T: Clone> {
 	shutdown_reason: Arc<Mutex<Option<T>>>,

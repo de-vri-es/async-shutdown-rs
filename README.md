@@ -13,7 +13,7 @@ All of these problems are handled by the [`ShutdownManager`] struct.
 You can get a future to wait for the shutdown signal with [`ShutdownManager::wait_shutdown_triggered()`].
 In this case you must write your async code to react to the shutdown signal appropriately.
 
-Alternatively, you can wrap a future to be cancelled (by being dropped) when the shutdown starts with [`ShutdownManager::wrap_cancel()`].
+Alternatively, you can wrap a future to be cancelled (by being dropped) when the shutdown is triggered with [`ShutdownManager::wrap_cancel()`].
 This doesn't require the wrapped future to know anything about the shutdown signal,
 but it also doesn't allow the future to run custom shutdown code.
 
@@ -22,23 +22,22 @@ The shutdown reason can be any type, as long as it implements [`Clone`].
 If you want to pass a non-[`Clone`] object or an object that is expensive to clone, you can wrap it in an [`Arc`].
 
 ## Waiting for futures to complete.
-If you have futures that run custom shutdown code (as opposed to just dropping the futures),
-you will want to wait for that cleanup code to finish.
+You may also want to wait for some futures to complete before actually shutting down instead of just dropping them.
+This might be important to cleanly shutdown and prevent data loss.
 You can do that with [`ShutdownManager::wait_shutdown_complete()`].
 That function returns a future that only completes when the shutdown is "completed".
 
 You must also prevent the shutdown from completing too early by calling [`ShutdownManager::delay_shutdown_token()`] or [`ShutdownManager::wrap_delay_shutdown()`].
-Note that this can only be done before the shutdown has completed.
-If the shutdown is already complete those functions will return an error.
-
 The [`ShutdownManager::delay_shutdown_token()`] function gives you a [`DelayShutdownToken`] which prevents the shutdown from completing.
 To allow the shutdown to finish, simply drop the token.
 Alternatively, [`ShutdownManager::wrap_delay_shutdown()`] wraps an existing future,
 and will prevent the shutdown from completing until the future either completes or is dropped.
 
+Note that you can only delay the shutdown completion if it has not completed already.
+If the shutdown is already complete those functions will return an error.
+
 You can also use a token to wrap a future with [`DelayShutdownToken::wrap_future()`].
-This has the advantage that it can never fail:
-the fact that you have a token means the shutdown has not finished yet.
+If you already have a token, this allows you to wrap a future without having to worry that the shutdown might already be completed.
 
 ## Automatically triggering shutdowns
 You can also trigger a shutdown automatically using a [`TriggerShutdownToken`].
@@ -133,7 +132,7 @@ async fn handle_client(shutdown: ShutdownManager<i32>, mut stream: TcpStream, ad
     // in which case we just log a message and return.
     //
     // If you already have a future that should be allowed to complete,
-    // you can also use `shutdown.wrap_wait(...)`.
+    // you can also use `shutdown.wrap_delay_shutdown(...)`.
     // Here it is easier to use a token though.
     let _delay_token = match shutdown.delay_shutdown_token() {
         Ok(token) => token,
