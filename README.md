@@ -178,6 +178,7 @@ async fn echo_loop(stream: &mut TcpStream) -> std::io::Result<()> {
 [`ShutdownManager::wrap_delay_shutdown()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.ShutdownManager.html#method.wrap_delay_shutdown
 [`DelayShutdownToken`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.DelayShutdownToken.html
 [`DelayShutdownToken::wrap_future()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.DelayShutdownToken.html#method.wrap_future
+[`TriggerShutdownToken`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.TriggerShutdownToken.html
 [`ShutdownManager::trigger_shutdown_token()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.ShutdownManager.html#method.trigger_shutdown_token
 [`ShutdownManager::wrap_trigger_shutdown()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.ShutdownManager.html#method.wrap_trigger_shutdown
 [`TriggerShutdownToken::wrap_future()`]: https://docs.rs/async-shutdown/latest/async_shutdown/struct.TriggerShutdownToken.html#method.wrap_future
