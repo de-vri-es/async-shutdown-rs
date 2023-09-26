@@ -13,6 +13,9 @@
 * Add a parameter for the shutdown reason in `ShutdownManager` methods `trigger_shutdown()`, `wrap_trigger_shutdown()` and `trigger_shutdown_token()`.
 * Add `ShutdownManager::shutdown_reason()` to retrieve the shutdown reason.
 * Return the shutdown reason from `ShutdownManager::wait_shutdown_triggered()` and `ShutdownManager::wait_shutdown_complete()`.
+* Add `shutdown_reason` field to `ShutdownAlreadyCompleted` struct.
+* Return a `ShutdownAlreadyStarted` error when calling `trigger_shutdown()` multiple times.
+* Change the output type of `WrapCancel` futures from `Option` to a `Result` with the shutdown reason as error.
 
 # Version 0.1.3 - 2023-08-14
 * Mark all future wrappers as `#[must_use]`.
