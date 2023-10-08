@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.2.1 - 2023-10-08
 * Fix `ShutdownManager::wait_shutdown_complete()` never completing if callend when no shutdown was triggered yet and no delay tokens exist.
 
 # Version 0.2.0 - 2023-09-26:
