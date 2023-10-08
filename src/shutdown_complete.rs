@@ -21,6 +21,7 @@ impl<T: Clone> Future for ShutdownComplete<T> {
 			if let Some(reason) = inner.shutdown_reason.clone() {
 				Poll::Ready(reason)
 			} else {
+				inner.on_shutdown_complete.push(context.waker().clone());
 				Poll::Pending
 			}
 		} else {
