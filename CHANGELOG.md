@@ -1,3 +1,6 @@
+# Unreleased
+* Fix waiting for shutdown when there are no delay tokens created.
+
 # Version 0.2.0 - 2023-09-26:
 * Rename `Shutdown` struct to `ShutdownManager`.
 * Rename `ShutdownManager` methods:
