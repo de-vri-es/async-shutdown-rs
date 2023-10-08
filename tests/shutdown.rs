@@ -135,6 +135,30 @@ fn wrap_delay() {
 }
 
 #[test]
+fn wait_for_shutdown_complete_in_task_without_delay_tokens() {
+	test_timeout(async {
+		let shutdown = ShutdownManager::new();
+
+		tokio::spawn({
+			let shutdown = shutdown.clone();
+			async move {
+				tokio::time::sleep(Duration::from_millis(10)).await;
+				assert!(let Ok(()) = shutdown.trigger_shutdown(10));
+			}
+		});
+
+		let task = tokio::spawn({
+			let shutdown = shutdown.clone();
+			async move {
+				assert!(shutdown.wait_shutdown_complete().await == 10);
+			}
+		});
+
+		assert!(let Ok(()) = task.await);
+	});
+}
+
+#[test]
 fn delay_token_too_late() {
 	// Try go get a delay-shutdown token after the shutdown completed.
 	let shutdown = ShutdownManager::new();
