@@ -1,5 +1,5 @@
 # Unreleased
-* Fix waiting for shutdown when there are no delay tokens created.
+* Fix `ShutdownManager::wait_shutdown_complete()` never completing if callend when no shutdown was triggered yet and no delay tokens exist.
 
 # Version 0.2.0 - 2023-09-26:
 * Rename `Shutdown` struct to `ShutdownManager`.
