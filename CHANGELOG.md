@@ -1,3 +1,6 @@
+# v0.1
+* Fix `shutdown_complete()` completing before shutdown even started.
+
 # Version 0.1.3 - 2023-08-14
 * Mark all future wrappers as `#[must_use]`.
 

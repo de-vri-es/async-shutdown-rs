@@ -17,7 +17,7 @@ impl Future for ShutdownComplete {
 	fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
 		let me = self.as_ref();
 		let mut inner = me.inner.lock().unwrap();
-		if inner.delay_tokens == 0 {
+		if inner.delay_tokens == 0  && inner.shutdown {
 			Poll::Ready(())
 		} else {
 			inner.on_shutdown_complete.push(context.waker().clone());
