@@ -1,5 +1,8 @@
+# main
+* Fix bug where the list of wakers to trigger on shutdown or shutdown completion could grow indefinitely.
+
 # Version 0.2.1 - 2023-10-08
-* Fix `ShutdownManager::wait_shutdown_complete()` never completing if callend when no shutdown was triggered yet and no delay tokens exist.
+* Fix `ShutdownManager::wait_shutdown_complete()` never completing if called when no shutdown was triggered yet and no delay tokens exist.
 
 # Version 0.2.0 - 2023-09-26:
 * Rename `Shutdown` struct to `ShutdownManager`.

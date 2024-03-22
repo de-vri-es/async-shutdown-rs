@@ -23,10 +23,9 @@ impl<T: Clone, F: Future> Future for WrapCancel<T, F> {
 	#[inline]
 	fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
 		// SAFETY: We never move `future`, so we can not violate the requirements of `F`.
+		// We do drop it, but that's allowed by `Pin`.
 		let me = unsafe { self.get_unchecked_mut() };
 
-		// SAFETY: We never move `future`, so we can not violate the requirements of `F`.
-		// We do drop it, but that's fine.
 		match &mut me.future {
 			Err(e) => return Poll::Ready(Err(e.clone())),
 			Ok(future) => {
@@ -38,8 +37,7 @@ impl<T: Clone, F: Future> Future for WrapCancel<T, F> {
 		}
 
 		// Otherwise check if the shutdown signal has been given.
-		let shutdown = Pin::new(&mut me.shutdown_signal)
-			.poll(context);
+		let shutdown = Pin::new(&mut me.shutdown_signal).poll(context);
 		match shutdown {
 			Poll::Ready(reason) => {
 				me.future = Err(reason.clone());

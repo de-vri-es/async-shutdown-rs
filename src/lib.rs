@@ -169,7 +169,6 @@
 
 use std::future::Future;
 use std::sync::{Arc, Mutex};
-use std::task::Waker;
 
 mod shutdown_complete;
 pub use shutdown_complete::ShutdownComplete;
@@ -178,6 +177,7 @@ mod shutdown_signal;
 pub use shutdown_signal::ShutdownSignal;
 
 mod wrap_cancel;
+use waker_list::WakerList;
 pub use wrap_cancel::WrapCancel;
 
 mod wrap_trigger_shutdown;
@@ -185,6 +185,8 @@ pub use wrap_trigger_shutdown::WrapTriggerShutdown;
 
 mod wrap_delay_shutdown;
 pub use wrap_delay_shutdown::WrapDelayShutdown;
+
+mod waker_list;
 
 /// Shutdown manager for asynchronous tasks and futures.
 ///
@@ -244,6 +246,7 @@ impl<T: Clone> ShutdownManager<T> {
 	pub fn wait_shutdown_triggered(&self) -> ShutdownSignal<T> {
 		ShutdownSignal {
 			inner: self.inner.clone(),
+			waker_token: None,
 		}
 	}
 
@@ -258,6 +261,7 @@ impl<T: Clone> ShutdownManager<T> {
 	pub fn wait_shutdown_complete(&self) -> ShutdownComplete<T> {
 		ShutdownComplete {
 			inner: self.inner.clone(),
+			waker_token: None,
 		}
 	}
 
@@ -459,10 +463,10 @@ struct ShutdownManagerInner<T> {
 	delay_tokens: usize,
 
 	/// Tasks to wake when a shutdown is triggered.
-	on_shutdown: Vec<Waker>,
+	on_shutdown: WakerList,
 
 	/// Tasks to wake when the shutdown is complete.
-	on_shutdown_complete: Vec<Waker>,
+	on_shutdown_complete: WakerList,
 }
 
 impl<T: Clone> ShutdownManagerInner<T> {
@@ -470,8 +474,8 @@ impl<T: Clone> ShutdownManagerInner<T> {
 		Self {
 			shutdown_reason: None,
 			delay_tokens: 0,
-			on_shutdown_complete: Vec::new(),
-			on_shutdown: Vec::new(),
+			on_shutdown_complete: WakerList::new(),
+			on_shutdown: WakerList::new(),
 		}
 	}
 
@@ -493,9 +497,7 @@ impl<T: Clone> ShutdownManagerInner<T> {
 			},
 			None => {
 				self.shutdown_reason = Some(reason);
-				for abort in std::mem::take(&mut self.on_shutdown) {
-					abort.wake()
-				}
+				self.on_shutdown.wake_all();
 				if self.delay_tokens == 0 {
 					self.notify_shutdown_complete()
 				}
@@ -505,9 +507,7 @@ impl<T: Clone> ShutdownManagerInner<T> {
 	}
 
 	fn notify_shutdown_complete(&mut self) {
-		for waiter in std::mem::take(&mut self.on_shutdown_complete) {
-			waiter.wake()
-		}
+		self.on_shutdown_complete.wake_all();
 	}
 }
 
