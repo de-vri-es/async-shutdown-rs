@@ -1,4 +1,4 @@
-# main
+# Version 0.2.2 - 2024-03-22
 * Fix bug where the list of wakers to trigger on shutdown or shutdown completion could grow indefinitely.
 
 # Version 0.2.1 - 2023-10-08
