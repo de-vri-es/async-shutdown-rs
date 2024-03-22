@@ -1,3 +1,7 @@
+# v0.1
+* Fix `shutdown_complete()` completing before shutdown even started.
+* Fix bug where the list of wakers to trigger on shutdown or shutdown completion could grow indefinitely.
+
 # Version 0.1.3 - 2023-08-14
 * Mark all future wrappers as `#[must_use]`.
 

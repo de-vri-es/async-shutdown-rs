@@ -94,7 +94,7 @@ async fn echo_loop(stream: &mut TcpStream) -> std::io::Result<()> {
 		if read == 0 {
 			break;
 		}
-		stream.write(&buffer[..read]).await?;
+		stream.write_all(&buffer[..read]).await?;
 	}
 
 	Ok(())
