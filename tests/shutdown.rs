@@ -4,14 +4,51 @@ use std::future::Future;
 use std::time::Duration;
 
 use async_shutdown::ShutdownManager;
+use tokio::task::JoinHandle;
+
+#[cfg(feature = "multi-thread")]
+fn spawn<F>(fut: F) -> JoinHandle<F::Output>
+where
+	F: Future + Send + 'static,
+	F::Output: Send + 'static,
+{
+	tokio::spawn(fut)
+}
+#[cfg(not(feature = "multi-thread"))]
+fn spawn<F>(fut: F) -> JoinHandle<F::Output>
+where
+	F: Future + 'static,
+	F::Output: 'static,
+{
+	tokio::task::spawn_local(fut)
+}
 
 #[track_caller]
 fn test_timeout(test: impl Future<Output = ()>) {
-	let_assert!(Ok(runtime) = tokio::runtime::Runtime::new(), "failed to initialize tokio runtime");
+	#[cfg(feature = "multi-thread")]
+	let_assert!(
+		Ok(runtime) = tokio::runtime::Runtime::new(),
+		"failed to initialize tokio runtime"
+	);
+	#[cfg(not(feature = "multi-thread"))]
+	let_assert!(
+		Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build(),
+		"failed to initialize tokio runtime"
+	);
+	#[cfg(feature = "multi-thread")]
 	runtime.block_on(async move {
 		let test = tokio::time::timeout(Duration::from_millis(100), test);
 		assert!(let Ok(()) = test.await, "test timed out");
 	});
+	#[cfg(not(feature = "multi-thread"))]
+	{
+		let local = tokio::task::LocalSet::new();
+
+		local.block_on(&runtime, async move {
+			let test = tokio::time::timeout(Duration::from_millis(100), test);
+			assert!(let Ok(()) = test.await, "test timed out");
+		})
+	}
 }
 
 #[test]
@@ -28,14 +65,13 @@ fn shutdown() {
 	test_timeout(async {
 		let shutdown = ShutdownManager::new();
 
-		tokio::spawn({
+		spawn({
 			let shutdown = shutdown.clone();
 			async move {
 				tokio::time::sleep(Duration::from_millis(20)).await;
 				assert!(let Ok(()) = shutdown.trigger_shutdown(2));
 			}
 		});
-
 		assert!(shutdown.wait_shutdown_triggered().await == 2);
 		assert!(shutdown.wait_shutdown_complete().await == 2);
 	});
@@ -57,7 +93,7 @@ fn wrap_cancel() {
 	// Spawn a never-completing future that is automatically dropped on shutdown.
 	test_timeout(async {
 		let shutdown = ShutdownManager::new();
-		let task = tokio::spawn(shutdown.wrap_cancel(future::pending::<()>()));
+		let task = spawn(shutdown.wrap_cancel(future::pending::<()>()));
 		assert!(let Ok(()) = shutdown.trigger_shutdown("goodbye!"));
 		let_assert!(Ok(Err(reason)) = task.await);
 		assert!(reason == "goodbye!");
@@ -67,7 +103,7 @@ fn wrap_cancel() {
 	test_timeout(async {
 		let shutdown = ShutdownManager::new();
 		let wait_shutdown_triggered = shutdown.wait_shutdown_triggered();
-		let task = tokio::spawn(wait_shutdown_triggered.wrap_cancel(future::pending::<()>()));
+		let task = spawn(wait_shutdown_triggered.wrap_cancel(future::pending::<()>()));
 		assert!(let Ok(()) = shutdown.trigger_shutdown("wooh"));
 		let_assert!(Ok(Err(reason)) = task.await);
 		assert!(reason == "wooh");
@@ -79,14 +115,14 @@ fn wrap_cancel_no_shutdown() {
 	// Spawn an already ready future and verify that it can complete if no shutdown happens.
 	test_timeout(async {
 		let shutdown = ShutdownManager::<()>::new();
-		let task = tokio::spawn(shutdown.wrap_cancel(future::ready(10)));
+		let task = spawn(shutdown.wrap_cancel(future::ready(10)));
 		assert!(let Ok(Ok(10)) = task.await);
 	});
 
 	// Same test, but use a future that first sleeps and then completes.
 	test_timeout(async {
 		let shutdown = ShutdownManager::<()>::new();
-		let task = tokio::spawn(shutdown.wrap_cancel(async {
+		let task = spawn(shutdown.wrap_cancel(async {
 			tokio::time::sleep(Duration::from_millis(20)).await;
 			10u32
 		}));
@@ -108,7 +144,7 @@ fn delay_token() {
 		assert!(shutdown.is_shutdown_completed() == false);
 
 		// Move the token into a task where it is dropped after a short sleep.
-		tokio::spawn(async move {
+		spawn(async move {
 			tokio::time::sleep(Duration::from_millis(20)).await;
 			drop(delay);
 		});
@@ -125,7 +161,7 @@ fn wrap_delay() {
 		let_assert!(Ok(delay) = shutdown.delay_shutdown_token());
 		assert!(let Ok(()) = shutdown.trigger_shutdown(10));
 
-		tokio::spawn(delay.wrap_future(async move {
+		spawn(delay.wrap_future(async move {
 			tokio::time::sleep(Duration::from_millis(10)).await;
 		}));
 
@@ -139,7 +175,7 @@ fn wait_for_shutdown_complete_in_task_without_delay_tokens() {
 	test_timeout(async {
 		let shutdown = ShutdownManager::new();
 
-		tokio::spawn({
+		spawn({
 			let shutdown = shutdown.clone();
 			async move {
 				tokio::time::sleep(Duration::from_millis(10)).await;
@@ -147,7 +183,7 @@ fn wait_for_shutdown_complete_in_task_without_delay_tokens() {
 			}
 		});
 
-		let task = tokio::spawn({
+		let task = spawn({
 			let shutdown = shutdown.clone();
 			async move {
 				assert!(shutdown.wait_shutdown_complete().await == 10);
@@ -185,7 +221,7 @@ fn vital_token() {
 		let shutdown = ShutdownManager::new();
 
 		let vital = shutdown.trigger_shutdown_token("done");
-		tokio::spawn(async move {
+		spawn(async move {
 			tokio::time::sleep(Duration::from_millis(20)).await;
 			drop(vital);
 		});
@@ -201,7 +237,7 @@ fn wrap_vital() {
 	test_timeout(async {
 		let shutdown = ShutdownManager::new();
 
-		tokio::spawn(shutdown.wrap_trigger_shutdown("sleep done", async move {
+		spawn(shutdown.wrap_trigger_shutdown("sleep done", async move {
 			tokio::time::sleep(Duration::from_millis(20)).await;
 		}));
 
@@ -214,7 +250,7 @@ fn wrap_vital() {
 		let shutdown = ShutdownManager::new();
 
 		// Trigger the shutdown by dropping a vital token from a task after a short sleep.
-		tokio::spawn(shutdown.wrap_trigger_shutdown("stop", future::ready(())));
+		spawn(shutdown.wrap_trigger_shutdown("stop", future::ready(())));
 
 		assert!(shutdown.wait_shutdown_triggered().await == "stop");
 		assert!(shutdown.wait_shutdown_complete().await == "stop");

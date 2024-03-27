@@ -63,11 +63,13 @@
 //!
 //! [`tcp-echo-server`]: https://github.com/de-vri-es/async-shutdown-rs/blob/main/examples/tcp-echo-server.rs
 //!
-//! ```no_run
+//! ```ignore
 //! use async_shutdown::ShutdownManager;
 //! use std::net::SocketAddr;
 //! use tokio::io::{AsyncReadExt, AsyncWriteExt};
 //! use tokio::net::{TcpListener, TcpStream};
+//!
+//!
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -167,8 +169,13 @@
 
 #![warn(missing_docs)]
 
+#[cfg(not(feature = "multi-thread"))]
+use std::cell::{Ref, RefCell, RefMut};
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+#[cfg(not(feature = "multi-thread"))]
+use std::rc::Rc;
+#[cfg(feature = "multi-thread")]
+use std::sync::{Arc, Mutex, MutexGuard};
 
 mod shutdown_complete;
 pub use shutdown_complete::ShutdownComplete;
@@ -188,6 +195,60 @@ pub use wrap_delay_shutdown::WrapDelayShutdown;
 
 mod waker_list;
 
+#[cfg(feature = "multi-thread")]
+type LockRef<'a, T> = MutexGuard<'a, T>;
+#[cfg(not(feature = "multi-thread"))]
+type LockRef<'a, T> = Ref<'a, T>;
+
+#[cfg(feature = "multi-thread")]
+type LockRefMut<'a, T> = MutexGuard<'a, T>;
+#[cfg(not(feature = "multi-thread"))]
+type LockRefMut<'a, T> = RefMut<'a, T>;
+
+struct LockGuard<T> {
+	#[cfg(feature = "multi-thread")]
+	inner: Arc<Mutex<T>>,
+	#[cfg(not(feature = "multi-thread"))]
+	inner: Rc<RefCell<T>>,
+}
+
+impl<T> LockGuard<T> {
+	fn new(inner: T) -> Self {
+		Self {
+			#[cfg(feature = "multi-thread")]
+			inner: Arc::new(Mutex::new(inner)),
+			#[cfg(not(feature = "multi-thread"))]
+			inner: Rc::new(RefCell::new(inner)),
+		}
+	}
+
+	fn borrow(&self) -> LockRef<'_, T> {
+		#[cfg(feature = "multi-thread")]
+		let guard = self.inner.lock().unwrap();
+		#[cfg(not(feature = "multi-thread"))]
+		let guard = self.inner.borrow();
+
+		guard
+	}
+
+	fn borrow_mut(&self) -> LockRefMut<'_, T> {
+		#[cfg(feature = "multi-thread")]
+		let guard = self.inner.lock().unwrap();
+		#[cfg(not(feature = "multi-thread"))]
+		let guard = self.inner.borrow_mut();
+
+		guard
+	}
+}
+
+impl<T> Clone for LockGuard<T> {
+	fn clone(&self) -> Self {
+		Self {
+			inner: self.inner.clone(),
+		}
+	}
+}
+
 /// Shutdown manager for asynchronous tasks and futures.
 ///
 /// The shutdown manager allows you to:
@@ -199,7 +260,7 @@ mod waker_list;
 /// Each clone uses the same internal state.
 #[derive(Clone)]
 pub struct ShutdownManager<T: Clone> {
-	inner: Arc<Mutex<ShutdownManagerInner<T>>>,
+	inner: LockGuard<ShutdownManagerInner<T>>,
 }
 
 impl<T: Clone> ShutdownManager<T> {
@@ -207,20 +268,20 @@ impl<T: Clone> ShutdownManager<T> {
 	#[inline]
 	pub fn new() -> Self {
 		Self {
-			inner: Arc::new(Mutex::new(ShutdownManagerInner::new())),
+			inner: LockGuard::new(ShutdownManagerInner::new()),
 		}
 	}
 
 	/// Check if the shutdown has been triggered.
 	#[inline]
 	pub fn is_shutdown_triggered(&self) -> bool {
-		self.inner.lock().unwrap().shutdown_reason.is_some()
+		self.inner.borrow().shutdown_reason.is_some()
 	}
 
 	/// Check if the shutdown has completed.
 	#[inline]
 	pub fn is_shutdown_completed(&self) -> bool {
-		let inner = self.inner.lock().unwrap();
+		let inner = self.inner.borrow();
 		inner.shutdown_reason.is_some() && inner.delay_tokens == 0
 	}
 
@@ -229,7 +290,7 @@ impl<T: Clone> ShutdownManager<T> {
 	/// Returns [`None`] if the shutdown has not been triggered yet.
 	#[inline]
 	pub fn shutdown_reason(&self) -> Option<T> {
-		self.inner.lock().unwrap().shutdown_reason.clone()
+		self.inner.borrow().shutdown_reason.clone()
 	}
 
 	/// Asynchronously wait for the shutdown to be triggered.
@@ -274,7 +335,7 @@ impl<T: Clone> ShutdownManager<T> {
 	/// If the shutdown was already started, this function returns an error.
 	#[inline]
 	pub fn trigger_shutdown(&self, reason: T) -> Result<(), ShutdownAlreadyStarted<T>> {
-		self.inner.lock().unwrap().shutdown(reason)
+		self.inner.borrow_mut().shutdown(reason)
 	}
 
 	/// Wrap a future so that it is cancelled (dropped) when the shutdown is triggered.
@@ -299,7 +360,10 @@ impl<T: Clone> ShutdownManager<T> {
 	///
 	/// If the shutdown has already completed, this function returns an error.
 	#[inline]
-	pub fn wrap_delay_shutdown<F: Future>(&self, future: F) -> Result<WrapDelayShutdown<T, F>, ShutdownAlreadyCompleted<T>> {
+	pub fn wrap_delay_shutdown<F: Future>(
+		&self,
+		future: F,
+	) -> Result<WrapDelayShutdown<T, F>, ShutdownAlreadyCompleted<T>> {
 		Ok(self.delay_shutdown_token()?.wrap_future(future))
 	}
 
@@ -315,7 +379,7 @@ impl<T: Clone> ShutdownManager<T> {
 	/// consider using [`Self::wrap_delay_shutdown()`] instead.
 	#[inline]
 	pub fn delay_shutdown_token(&self) -> Result<DelayShutdownToken<T>, ShutdownAlreadyCompleted<T>> {
-		let mut inner = self.inner.lock().unwrap();
+		let mut inner = self.inner.borrow_mut();
 		// Shutdown already completed, can't delay completion anymore.
 		if inner.delay_tokens == 0 {
 			if let Some(reason) = &inner.shutdown_reason {
@@ -340,7 +404,7 @@ impl<T: Clone> ShutdownManager<T> {
 	#[inline]
 	pub fn trigger_shutdown_token(&self, shutdown_reason: T) -> TriggerShutdownToken<T> {
 		TriggerShutdownToken {
-			shutdown_reason: Arc::new(Mutex::new(Some(shutdown_reason))),
+			shutdown_reason: LockGuard::new(Some(shutdown_reason)),
 			inner: self.inner.clone(),
 		}
 	}
@@ -359,7 +423,7 @@ impl<T: Clone> Default for ShutdownManager<T> {
 ///
 /// All clones must be dropped before the shutdown can complete.
 pub struct DelayShutdownToken<T: Clone> {
-	inner: Arc<Mutex<ShutdownManagerInner<T>>>,
+	inner: LockGuard<ShutdownManagerInner<T>>,
 }
 
 impl<T: Clone> DelayShutdownToken<T> {
@@ -388,7 +452,7 @@ impl<T: Clone> DelayShutdownToken<T> {
 impl<T: Clone> Clone for DelayShutdownToken<T> {
 	#[inline]
 	fn clone(&self) -> Self {
-		self.inner.lock().unwrap().increase_delay_count();
+		self.inner.borrow_mut().increase_delay_count();
 		DelayShutdownToken {
 			inner: self.inner.clone(),
 		}
@@ -398,7 +462,7 @@ impl<T: Clone> Clone for DelayShutdownToken<T> {
 impl<T: Clone> Drop for DelayShutdownToken<T> {
 	#[inline]
 	fn drop(&mut self) {
-		self.inner.lock().unwrap().decrease_delay_count();
+		self.inner.borrow_mut().decrease_delay_count();
 	}
 }
 
@@ -409,8 +473,8 @@ impl<T: Clone> Drop for DelayShutdownToken<T> {
 /// Even if the rest of the clones still exist.
 #[derive(Clone)]
 pub struct TriggerShutdownToken<T: Clone> {
-	shutdown_reason: Arc<Mutex<Option<T>>>,
-	inner: Arc<Mutex<ShutdownManagerInner<T>>>,
+	shutdown_reason: LockGuard<Option<T>>,
+	inner: LockGuard<ShutdownManagerInner<T>>,
 }
 
 impl<T: Clone> TriggerShutdownToken<T> {
@@ -445,8 +509,8 @@ impl<T: Clone> TriggerShutdownToken<T> {
 impl<T: Clone> Drop for TriggerShutdownToken<T> {
 	#[inline]
 	fn drop(&mut self) {
-		let mut inner = self.inner.lock().unwrap();
-		let reason = self.shutdown_reason.lock().unwrap().take();
+		let mut inner = self.inner.borrow_mut();
+		let reason = self.shutdown_reason.borrow_mut().take();
 		if let Some(reason) = reason {
 			inner.shutdown(reason).ok();
 		}
@@ -492,9 +556,7 @@ impl<T: Clone> ShutdownManagerInner<T> {
 
 	fn shutdown(&mut self, reason: T) -> Result<(), ShutdownAlreadyStarted<T>> {
 		match &self.shutdown_reason {
-			Some(original_reason) => {
-				Err(ShutdownAlreadyStarted::new(original_reason.clone(), reason))
-			},
+			Some(original_reason) => Err(ShutdownAlreadyStarted::new(original_reason.clone(), reason)),
 			None => {
 				self.shutdown_reason = Some(reason);
 				self.on_shutdown.wake_all();
@@ -523,8 +585,11 @@ pub struct ShutdownAlreadyStarted<T> {
 }
 
 impl<T> ShutdownAlreadyStarted<T> {
-	pub(crate) const fn new(shutdown_reason: T, ignored_reason:T ) -> Self {
-		Self { shutdown_reason, ignored_reason }
+	pub(crate) const fn new(shutdown_reason: T, ignored_reason: T) -> Self {
+		Self {
+			shutdown_reason,
+			ignored_reason,
+		}
 	}
 }
 
