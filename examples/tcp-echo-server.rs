@@ -75,7 +75,7 @@ async fn handle_client(shutdown: ShutdownManager<i32>, mut stream: TcpStream, ad
 		Err(_) => {
 			eprintln!("Shutdown already started, closing connection with {}", address);
 			return;
-		}
+		},
 	};
 
 	// Now run the echo loop, but cancel it when the shutdown is triggered.

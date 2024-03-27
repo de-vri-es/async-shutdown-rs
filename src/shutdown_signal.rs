@@ -1,10 +1,8 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use crate::waker_list::WakerToken;
-use crate::{WrapCancel, ShutdownManagerInner};
+use crate::{waker_list::WakerToken, LockGuard, ShutdownManagerInner, WrapCancel};
 
 /// A future to wait for a shutdown signal.
 ///
@@ -12,7 +10,7 @@ use crate::{WrapCancel, ShutdownManagerInner};
 ///
 /// The shutdown signal can be cloned and sent between threads freely.
 pub struct ShutdownSignal<T: Clone> {
-	pub(crate) inner: Arc<Mutex<ShutdownManagerInner<T>>>,
+	pub(crate) inner: LockGuard<ShutdownManagerInner<T>>,
 	pub(crate) waker_token: Option<WakerToken>,
 }
 
@@ -30,7 +28,7 @@ impl<T: Clone> Clone for ShutdownSignal<T> {
 impl<T: Clone> Drop for ShutdownSignal<T> {
 	fn drop(&mut self) {
 		if let Some(token) = self.waker_token.take() {
-			let mut inner = self.inner.lock().unwrap();
+			let mut inner = self.inner.borrow_mut();
 			inner.on_shutdown.deregister(token);
 		}
 	}
@@ -58,7 +56,7 @@ impl<T: Clone> Future for ShutdownSignal<T> {
 	#[inline]
 	fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
 		let me = self.get_mut();
-		let mut inner = me.inner.lock().unwrap();
+		let mut inner = me.inner.borrow_mut();
 
 		// We're being polled, so we should deregister the waker (if any).
 		if let Some(token) = me.waker_token.take() {
@@ -103,15 +101,23 @@ mod test {
 	async fn waker_list_doesnt_grow_infinitely() {
 		let shutdown = crate::ShutdownManager::<()>::new();
 		for i in 0..100_000 {
-			let task = tokio::spawn(shutdown.wrap_cancel(async move {
+			#[cfg(feature = "multi-thread")]
+			let task = tokio::task::spawn(shutdown.wrap_cancel(async move {
 				tokio::task::yield_now().await;
+			}));
+			#[cfg(not(feature = "multi-thread"))]
+			let ls = tokio::task::LocalSet::new();
+			#[cfg(not(feature = "multi-thread"))]
+			let task = ls.run_until(shutdown.wrap_cancel(async move {
+				tokio::task::yield_now().await;
+				tokio::io::Result::Ok(())
 			}));
 			assert!(let Ok(Ok(())) = task.await, "task = {i}");
 		}
 
 		// Since we wait for each task to complete before spawning another,
 		// the total amount of waker slots used should be only 1.
-		let inner = shutdown.inner.lock().unwrap();
+		let inner = shutdown.inner.borrow();
 		assert!(inner.on_shutdown.total_slots() == 1);
 		assert!(inner.on_shutdown.empty_slots() == 1);
 	}
@@ -135,20 +141,20 @@ mod test {
 		assert!(let Some(_) = &signal.waker_token);
 
 		{
-			let inner = shutdown.inner.lock().unwrap();
+			let inner = shutdown.inner.borrow();
 			assert!(inner.on_shutdown.total_slots() == 2);
 			assert!(inner.on_shutdown.empty_slots() == 0);
 		}
 
 		{
 			drop(signal);
-			let inner = shutdown.inner.lock().unwrap();
+			let inner = shutdown.inner.borrow();
 			assert!(inner.on_shutdown.empty_slots() == 1);
 		}
 
 		{
 			drop(cloned);
-			let inner = shutdown.inner.lock().unwrap();
+			let inner = shutdown.inner.borrow();
 			assert!(inner.on_shutdown.empty_slots() == 2);
 		}
 	}
